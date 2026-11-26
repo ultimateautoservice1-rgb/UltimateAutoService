@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ULTIMATE AUTO HAUZ - Client & Invoice Management</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div id="login-overlay">
+    <div id="login-form-box">
+        <h2>Invoice System Login</h2>
+        <form id="login-form">
+            <input type="text" id="username" placeholder="Username" required>
+            <input type="password" id="password" placeholder="Password" required>
+            <button type="submit">Login</button>
+            <p id="login-message" style="color: red; margin-top: 10px;"></p>
+        </form>
+    </div>
+</div>
+
+<div class="invoice-box" id="app-container" style="display: none;">
+
+    <!-- MENÚ PRINCIPAL -->
+    <div id="main-menu" class="screen active">
+        <h2>Main Menu</h2>
+        <div class="menu-grid">
+            <button class="menu-button" onclick="showScreen('select-client-invoice')">
+                📄 Facturación
+            </button>
+            <button class="menu-button" style="background-color: #28a745;" onclick="startNewInspection()">
+                📋 Inspecciones
+            </button>
+            <button class="menu-button" onclick="showScreen('clients-screen')">
+                👤 Clientes
+            </button>
+            <button class="menu-button" style="background-color: #17a2b8;" onclick="showScreen('search-invoices-screen')">
+                🔍 Buscar Factura
+            </button>
+        </div>
+        <div style="margin-top: 20px;">
+            <button type="button" onclick="exportBackupJSON()" style="background:#343a40; color:#fff; border:none; padding:8px 14px; border-radius:4px; cursor:pointer; font-size:12px; font-weight:600;">
+                ⬇️ Descargar Respaldo (.JSON)
+            </button>
+        </div>
+    </div>
+
+    <!-- PANTALLA DE BUSCADOR GLOBAL -->
+    <div id="search-invoices-screen" class="screen">
+        <button class="back-button" onclick="showScreen('main-menu')">← Back to Menu</button>
+        <h2>🔍 Búsqueda de Mantenimientos y Facturas</h2>
+
+        <div class="search-type-toggles">
+            <label><input type="radio" name="searchType" value="plate" checked onchange="updateSearchUI()"> Buscar por Placa (Vehículo)</label>
+            <label><input type="radio" name="searchType" value="invoice" onchange="updateSearchUI()"> Buscar por No. de Factura</label>
+        </div>
+
+        <div id="search-controls">
+            <input type="text" id="global-invoice-search" placeholder="Ingrese No. de Placa (Ej. XYZ 123)..." onkeyup="performGlobalSearch()">
+        </div>
+        <div class="client-list" id="global-search-results">
+            <p style="text-align: center; color: #777; margin-top: 15px;">Ingrese un dato para buscar.</p>
+        </div>
+    </div>
+
+    <!-- PANTALLA HISTORIAL DEL VEHÍCULO -->
+    <div id="vehicle-history-screen" class="screen">
+        <div class="no-print" style="margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;">
+            <button class="back-button" style="margin-bottom: 0;" id="vehicle-history-back-btn" onclick="goBackFromVehicleHistory()">← Volver</button>
+            <button style="background-color: #28a745; color: white; padding: 8px 14px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px;" onclick="window.print()">🖨️ Imprimir Historial</button>
+        </div>
+
+        <div id="vehicle-history-print-area" style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #ddd; position: relative; z-index: 1;">
+            <div style="text-align: center; margin-bottom: 15px; border-bottom: 2px solid #000; padding-bottom: 8px;">
+                <h1 style="color: #000; margin: 0; font-size: 20px;">HISTORIAL DE MANTENIMIENTO</h1>
+                <p style="margin: 4px 0 0 0; color: #444; font-weight: bold; font-size: 11px;">ULTIMATE AUTO HAUZ | (773) 537-5917</p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; background: #f9f9f9; padding: 12px; border-radius: 5px; border: 1px solid #eee;">
+                <div>
+                    <h3 style="margin-top: 0; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 4px; font-size: 12px;">Detalles del Vehículo</h3>
+                    <p style="margin: 4px 0;"><strong>Placa:</strong> <span id="vh-plate" style="color: #d9534f; font-weight: bold;"></span></p>
+                    <p style="margin: 4px 0;"><strong>Vehículo:</strong> <span id="vh-car"></span></p>
+                    <p style="margin: 4px 0;"><strong>VIN:</strong> <span id="vh-vin"></span></p>
+                </div>
+                <div>
+                    <h3 style="margin-top: 0; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 4px; font-size: 12px;">Información del Cliente</h3>
+                    <p style="margin: 4px 0;"><strong>Nombre:</strong> <span id="vh-client"></span></p>
+                    <p style="margin: 4px 0;"><strong>Teléfono:</strong> <span id="vh-phone"></span></p>
+                </div>
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; margin-top: 10px;" id="vh-table">
+                <thead>
+                    <tr style="background-color: #e9ecef;">
+                        <th style="padding: 8px; border: 1px solid #ccc; text-align: left; width: 20%;">Fecha</th>
+                        <th style="padding: 8px; border: 1px solid #ccc; text-align: left; width: 15%;">Factura</th>
+                        <th style="padding: 8px; border: 1px solid #ccc; text-align: left; width: 50%;">Work / Part Description</th>
+                        <th style="padding: 8px; border: 1px solid #ccc; text-align: right; width: 15%;">Total</th>
+                        <th class="no-print" style="padding: 8px; border: 1px solid #ccc; text-align: center; width: 10%;">Acción</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- PANTALLA DE CLIENTES (SOLO VER HISTORIAL DE VEHÍCULOS / TRABAJOS) -->
+    <div id="clients-screen" class="screen">
+        <button class="back-button" onclick="showScreen('main-menu')">← Back to Menu</button>
+        <h2>👤 Client Management</h2>
+
+        <div id="client-controls">
+            <input type="text" id="client-search" placeholder="Search client by name or phone..." onkeyup="searchClients()">
+            <button id="add-client-btn" onclick="addNewClient()">+ Add New Client</button>
+        </div>
+
+        <div class="client-list" id="client-list"></div>
+    </div>
+
+    <!-- PANTALLA SELECCIONAR CLIENTE PARA NUEVA FACTURA -->
+    <div id="select-client-invoice" class="screen">
+        <button class="back-button" onclick="showScreen('main-menu')">← Back to Menu</button>
+        <h2>📄 Start New Invoice - Select Client</h2>
+
+        <div id="select-client-controls">
+            <input type="text" id="invoice-client-search" placeholder="Search client for billing..." onkeyup="searchClientsForInvoice()">
+        </div>
+
+        <div class="client-list" id="invoice-client-list"></div>
+    </div>
+
+    <!-- PANTALLA VEHÍCULOS DEL CLIENTE -->
+    <div id="client-history-screen" class="screen">
+        <button class="back-button" onclick="showScreen('clients-screen')">← Back to Clients</button>
+        <h2 id="history-client-name"></h2>
+        <p>Vehículos registrados (Click para ver historial de trabajos):</p>
+        <div id="history-list"></div>
+    </div>
+
+    <!-- PANTALLA PRINCIPAL DE FACTURA / INSPECCIÓN -->
+    <div id="invoice-content" class="screen">
+        <button class="back-button" onclick="cancelInvoice()">← Cancel & Back</button>
+
+        <div id="controls">
+            <button id="save-only-invoice-btn" onclick="saveInvoice(false)">💾 Guardar sin imprimir</button>
+            <button id="save-invoice-btn" onclick="saveInvoice(true)">💾 Guardar e Imprimir</button>
+        </div>
+
+        <div id="invoice-template">
+            <datalist id="plate-suggestions"></datalist>
+
+            <!-- ENCABEZADO COMPACTO -->
+            <div class="compact-header">
+                <div class="header-left">
+                    <img src="LOGOTIPO.png" alt="Logo" class="taller-logo" onerror="this.style.display='none'">
+                    <div class="taller-info">
+                        <h2>ULTIMATE AUTO HAUZ</h2>
+                        <p>1246 N PULASKI RD, CHICAGO IL 60651</p>
+                        <p>PHONE: (773) 537-5917</p>
+                        <p>LICENCE NO: **2463157**</p>
+                        <p id="doc-folio-meta">FOLIO: <span id="invoiceNumberDisplay"></span> | DATE: <span id="currentDate"></span></p>
+                    </div>
+                </div>
+
+                <div class="header-right">
+                    <div class="field-row">
+                        <label for="car-year">YEAR:</label>
+                        <input type="text" id="car-year" placeholder="2023">
+                    </div>
+                    <div class="field-row">
+                        <label for="car-make">MAKE:</label>
+                        <input type="text" id="car-make" placeholder="Honda">
+                    </div>
+                    <div class="field-row">
+                        <label for="car-model">MODEL:</label>
+                        <input type="text" id="car-model" placeholder="CRV">
+                    </div>
+                    <div class="field-row">
+                        <label for="car-mileage">MILEAGE:</label>
+                        <input type="text" id="car-mileage" placeholder="95,000">
+                    </div>
+                    <div class="field-row">
+                        <label for="car-plate">LICENCE PLATE:</label>
+                        <input type="text" id="car-plate" placeholder="XYZ 123" list="plate-suggestions" title="Escribe para ver vehículos guardados">
+                    </div>
+                    <div class="field-row">
+                        <label for="car-vin">VIN NUMBER:</label>
+                        <input type="text" id="car-vin" placeholder="17 Digit VIN">
+                    </div>
+                    <div class="field-row">
+                        <label for="customer-name">CUSTOMER NAME:</label>
+                        <input type="text" id="customer-name" placeholder="John Doe" readonly>
+                    </div>
+                    <div class="field-row">
+                        <label for="customer-phone">PHONE:</label>
+                        <input type="text" id="customer-phone" placeholder="(773) 555-1234">
+                    </div>
+                    <div class="field-row mode-invoice-only">
+                        <label for="customer-license">DRIVER LICENCE:</label>
+                        <input type="text" id="customer-license" placeholder="L123-4567-890">
+                    </div>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <!-- FORMULARIO FACTURA -->
+                <div id="addItemContainer" class="mode-invoice-only">
+                    <form id="addItemForm">
+                        <select id="descriptionSelector" title="Select Labor Work Done"></select>
+                        <input type="number" id="itemTotal" placeholder="Total Cost ($)" min="0.00" step="0.01" title="Total Cost">
+                        <label class="tax-checkbox-label">
+                            <input type="checkbox" id="isTaxableCheck"> Incluir Tax
+                        </label>
+                        <button type="submit">Add Work</button>
+                    </form>
+                    <input type="text" id="customDescription" placeholder="Enter custom labor/part description and press Enter...">
+                </div>
+
+                <!-- FORMULARIO INSPECCIÓN -->
+                <div id="addInspectionContainer" class="mode-inspection-only" style="display:none;">
+                    <div class="inspection-form-grid">
+                        <input type="text" id="inspectionDescInput" placeholder="Write inspection description and press Enter...">
+                        <button type="button" id="addInspectionBtn" onclick="addInspectionRow()">+ Añadir Descripción</button>
+                    </div>
+                </div>
+
+                <!-- TABLA UNIFICADA -->
+                <table id="itemsTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 5%;">#</th>
+                            <th id="descHeaderCol" style="width: 70%;">Work / Part Description</th>
+                            <th class="text-right mode-invoice-only" style="width: 20%;">Total Cost</th>
+                            <th class="no-print" style="width: 5%;"></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+
+                <!-- TOTALES (SOLO FACTURA) -->
+                <div class="totals-box mode-invoice-only">
+                    <table>
+                        <tr>
+                            <td>SUBTOTAL:</td>
+                            <td class="text-right" id="subtotal">$0.00</td>
+                        </tr>
+                        <tr class="tax-row">
+                            <td>TAX (10.25%):</td>
+                            <td class="text-right" id="tax">$0.00</td>
+                        </tr>
+                        <tr class="total-row">
+                            <td>TOTAL DUE:</td>
+                            <td class="text-right" id="total">$0.00</td>
+                        </tr>
+                    </table>
+                </div>
+                <div style="clear: both;"></div>
+            </div>
+
+            <!-- PIE DE PÁGINA (SOLO FACTURA) -->
+            <div class="invoice-footer-container mode-invoice-only">
+                <div class="clearfix">
+                    <div class="warranty-section">
+                        <p><strong>All repair work and all parts used are:</strong></p>
+                        <div>
+                            <label>
+                                <input type="checkbox" name="warranty" value="Warranted" id="warranty-warranted"> **Warranted**
+                            </label>
+                            <label style="margin-left: 15px;">
+                                <input type="checkbox" name="warranty" value="NotWarranted" id="warranty-not-warranted"> **Not Warranted**
+                            </label>
+                        </div>
+                        <p style="margin-top: 8px; font-weight: bold;">For minimum of 90 days And / Or 3,000 Miles</p>
+                    </div>
+
+                    <div class="signature-frame-container">
+                        <div class="signature-frame">
+                            <div class="signature-area">
+                                <p>**Thank you for your business**</p>
+                                <div class="signature-line"></div>
+                                <p>Customer Signature</p>
+                                <p class="agreement-text">
+                                    **By signing this invoice you agree that the vehicle was received in good condition at time of delivery!**
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VISOR DE FACTURA / INSPECCIÓN GUARDADA -->
+    <div id="invoice-viewer" class="screen">
+        <div id="invoice-viewer-controls">
+            <button class="back-button" id="viewer-back-btn" onclick="goBackFromViewer()">← Back</button>
+            <button id="viewer-edit-btn" onclick="editSavedInvoice()" style="background-color: #ffc107; color: #000;">✏️ Edit Invoice</button>
+            <button id="viewer-print-btn" onclick="printInvoicePrompt()">🖨️ Print View</button>
+        </div>
+
+        <div id="viewer-content-area"></div>
+    </div>
+
+</div>
+
+<script>
+    const SUPABASE_URL = 'https://hvsuyruztwvgcfrtgull.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_J9zjBF83DTxTDR1W6KoDow_T9Tb82v_';
+    const supabaseClient = window.supabase
+        ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+        : null;
+
+    window.guardarReciboEnSupabase = async function (reciboJSON) {
+        if (!supabaseClient) {
+            console.warn('Supabase SDK no cargado aún.');
+            return { ok: false, error: 'SDK not loaded' };
+        }
+        const { data, error } = await supabaseClient
+            .from('recibos')
+            .insert([{ datos: reciboJSON }]);
+
+        if (error) {
+            console.error('Error guardando recibo en Supabase:', error);
+            return { ok: false, error };
+        }
+        return { ok: true, data };
+    };
+</script>
+<script src="app.js"></script>
+</body>
+</html>
